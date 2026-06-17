@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ForensicLogX — Enterprise Security Command Console</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- Leaflet.js Mapping -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Apache ECharts -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<!-- SocketIO -->
+<script src="https://cdn.jsdelivr.net/npm/socket.io@4.7.2/client-dist/socket.io.min.js"></script>
+<link rel="shortcut icon" type="image/png" href="/static/favicon.png?v=1">
+<link rel="icon" type="image/png" href="/static/favicon.png?v=1">
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- ── GLOBAL COMMAND HUD (Header Bar) ─────────────────────────────────── -->
+<nav class="nav">
+  <button class="sidebar-toggle" onclick="toggleSidebar()">
+    <i data-lucide="menu"></i>
+  </button>
+  <div class="nav-logo">
+    <i data-lucide="shield-alert"></i>
+    FORENSICLOGX
+  </div>
+  <span class="nav-badge">SOC CORE v2.5 — ENTERPRISE EDITION</span>
+  
+  <div class="nav-spacer"></div>
+  
+  <!-- System Telemetry Widget -->
+  <div class="hud-telemetry">
+    <div id="agentPill" class="agent-pill offline">
+      <span class="agent-dot"></span>
+      <span id="agentLabel">Agent Offline</span>
+    </div>
+    
+    <div class="hud-stat">
+      <span class="hud-stat-label">Agent ID</span>
+      <span class="hud-stat-val" id="agentStatus2">—</span>
+    </div>
+    
+    <div class="hud-stat">
+      <span class="hud-stat-label">Telemetry Status</span>
+      <span class="hud-stat-val glowing">ACTIVE</span>
+    </div>
+    
+    <div class="hud-stat">
+      <span class="hud-stat-label">Server</span>
+      <span class="hud-stat-val" style="color: var(--accent3);">ONLINE</span>
+    </div>
+  </div>
+
+  <!-- Threat Level HUD -->
+  <div class="threat-hud">
+    <span class="threat-hud-dot"></span>
+    <span>SYS THREAT Lvl:</span>
+    <span class="threat-hud-level" id="hudThreatLevel">NORMAL</span>
+  </div>
+
+  <!-- SOC Clock -->
+  <div class="soc-clock">
+    <i data-lucide="clock" style="width: 13px; height: 13px; color: var(--accent);"></i>
+    <span id="socTime">00:00:00 UTC</span>
+  </div>
+</nav>
+
+<div class="layout">
+  <!-- ── SOC NAVIGATION CONSOLE (Left Sidebar) ────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-search-box">
+      <i data-lucide="search"></i>
+      <input type="text" class="sidebar-search" placeholder="Quick Search IOCs..." id="sideSearch" onkeyup="if(event.key === 'Enter') handleSideSearch(this.value)">
+    </div>
+    
+    <!-- Mode Selector Hidden to lock dashboard to Live SOC state -->
+    <!--
+    <div class="mode-selector">
+      <button id="btn-mode-live" class="mode-btn active" onclick="setConsoleMode('live')">
+        <i data-lucide="radio"></i> <span>Live SOC</span>
+      </button>
+      <button id="btn-mode-forensic" class="mode-btn" onclick="setConsoleMode('forensic')">
+        <i data-lucide="folder-search"></i> <span>Forensic</span>
+      </button>
+    </div>
+    -->
+    
+    <div class="nav-section">Operations</div>
+    <div class="nav-item active" onclick="switchView('dashboard',this)">
+      <i data-lucide="layout-dashboard"></i>
+      <span>Executive Overview</span>
+    </div>
+    <div class="nav-item" onclick="switchView('live',this)">
+      <i data-lucide="activity"></i>
+      <span>Live Threat Feed</span>
+    </div>
+    <div class="nav-item" onclick="switchView('testlab',this)" id="nav-testlab">
+      <i data-lucide="target"></i>
+      <span>Cyber Range Lab</span>
+    </div>
+    
+    <div class="nav-section">SIEM / Analytics</div>
+    <div class="nav-item" onclick="switchView('threats',this)">
+      <i data-lucide="shield-bomb"></i>
+      <span>Incident Console</span>
+    </div>
+    <div class="nav-item" onclick="switchView('enterprise-detections',this)">
+      <i data-lucide="shield-alert"></i>
+      <span>Enterprise Detections</span>
+    </div>
+    <div class="nav-item" onclick="switchView('logs',this)">
+      <i data-lucide="terminal"></i>
+      <span>SIEM Log Viewer</span>
+    </div>
+    <div class="nav-item" onclick="switchView('upload',this)">
+      <i data-lucide="upload-cloud"></i>
+      <span>Upload Logs</span>
+    </div>
+    <div class="nav-item" onclick="switchView('timeline',this)">
+      <i data-lucide="git-commit"></i>
+      <span>Attack Timeline</span>
+    </div>
+    
+    <div class="nav-section">Defensive</div>
+    <div class="nav-item" onclick="switchView('integrity',this)">
+      <i data-lucide="fingerprint"></i>
+      <span>FIM Asset Integrity</span>
+    </div>
+    <div class="nav-item" onclick="switchView('blocking',this)">
+      <i data-lucide="shield-x"></i>
+      <span>Firewall Blocking</span>
+    </div>
+    
+    <div class="nav-section">Reports</div>
+    <div class="nav-item" onclick="switchView('report',this)">
+      <i data-lucide="file-text"></i>
+      <span>Forensic Reports</span>
+    </div>
+    
+    <div style="flex:1"></div>
+    
+    <div class="sidebar-footer" style="padding:12px 8px;border-top:1px solid var(--border);font-size:11px;color:var(--text3)">
+      <div style="font-weight:700;color:var(--text2)">Gohar Ali</div>
+      <div>FA-22-BSDFCS-095</div>
+      <div>BS Digital Forensics</div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ══════════════════ EXECUTIVE OVERVIEW (DASHBOARD) ══════════════════ -->
+    <div class="view active" id="view-dashboard">
+      <div class="view-header">
+        <h2>Executive Security Dashboard</h2>
+        <p class="text-muted">High-fidelity cybersecurity metrics, geolocated threat vectors, and MITRE mapping</p>
+      </div>
+
+      <!-- Live metrics counters row -->
+      <div class="metrics" style="margin-bottom: 8px;">
+        <div class="metric m-blue">
+          <div class="metric-label">Total Events <i data-lucide="database" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val blue" id="m-total">—</div>
+          <div class="metric-sub">accumulated log rows</div>
+        </div>
+        <div class="metric m-red">
+          <div class="metric-label">Threats Logged <i data-lucide="skull" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val red" id="m-threats">—</div>
+          <div class="metric-sub">signatures triggered</div>
+        </div>
+        <div class="metric m-purple">
+          <div class="metric-label">Suspicious IPs <i data-lucide="globe" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val purple" id="m-ips">—</div>
+          <div class="metric-sub">distinct traffic sources</div>
+        </div>
+        <div class="metric m-green">
+          <div class="metric-label">Error Rate <i data-lucide="alert-triangle" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val green" id="m-errors">—</div>
+          <div class="metric-sub">4xx &amp; 5xx requests</div>
+        </div>
+      </div>
+
+      <!-- Sigma Rules Engine HUD Metrics -->
+      <div class="metrics" style="margin-bottom: 16px;">
+        <div class="metric m-blue" onclick="showSigmaRulesModal()" style="cursor:pointer; position:relative;">
+          <div class="metric-label">Active Sigma Rules <i data-lucide="file-text" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val blue" id="m-sigma-rules">0</div>
+          <div class="metric-sub">Click to browse loaded rules</div>
+        </div>
+        <div class="metric m-red">
+          <div class="metric-label">Sigma Alert Total <i data-lucide="shield-alert" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val red" id="m-sigma-alerts">0</div>
+          <div class="metric-sub">total matches logged</div>
+        </div>
+        <div class="metric m-purple">
+          <div class="metric-label">Critical &amp; High <i data-lucide="skull" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val purple" id="m-sigma-critical">0</div>
+          <div class="metric-sub">high severity indicators</div>
+        </div>
+        <div class="metric m-green">
+          <div class="metric-label">Sigma Engine Status <i data-lucide="check-circle" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val green" style="color: var(--accent3);" id="m-sigma-status">ONLINE</div>
+          <div class="metric-sub">real-time matcher active</div>
+        </div>
+      </div>
+
+      <!-- Interactive WAF Map & Traffic Chart -->
+      <div class="grid2">
+        <div class="card" style="display:flex; flex-direction:column; justify-content: space-between;">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="map-pin"></i> Real-Time Attack Map Overlay</span>
+            <span class="badge sev-critical">Live Threat Vectors</span>
+          </div>
+          <div class="map-wrap" id="map"></div>
+        </div>
+        
+        <div class="card" style="display:flex; flex-direction:column; justify-content: space-between;">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="bar-chart-3"></i> Top Ingress Attack Sources</span>
+          </div>
+          <div id="topIPs" style="flex: 1; display:flex; flex-direction:column; justify-content: center;"></div>
+        </div>
+      </div>
+
+      <!-- MITRE ATT&CK Technique Mapping -->
+      <div class="card" style="margin-top: 16px;">
+        <div class="card-header">
+          <span class="card-title"><i data-lucide="grid"></i> MITRE ATT&CK Matrix technique coverage</span>
+          <span class="badge sev-high">Active Tactics Visualizer</span>
+        </div>
+        
+        <div class="mitre-grid">
+          <!-- Column 1 -->
+          <div class="mitre-column">
+            <div class="mitre-header-cell">Initial Access</div>
+            <div class="mitre-cell" id="mitre-sqli" title="Attacker injects SQL payloads into input forms to bypass authentication or dump database values.">
+              <span class="mitre-cell-id">T1190</span>
+              <span>SQL Injection</span>
+            </div>
+            <div class="mitre-cell" id="mitre-recon" title="Scanner activity mapping IP blocks, ports, and common administrative URLs.">
+              <span class="mitre-cell-id">T1595</span>
+              <span>Vulnerability Scanning</span>
+            </div>
+            <div class="mitre-cell" id="mitre-redirect" title="Open HTTP Redirect abuse targeting user navigation.">
+              <span class="mitre-cell-id">T1566.002</span>
+              <span>Open Redirect</span>
+            </div>
+          </div>
+          <!-- Column 2 -->
+          <div class="mitre-column">
+            <div class="mitre-header-cell">Execution</div>
+            <div class="mitre-cell" id="mitre-rce" title="Executing system-level shell commands via vulnerable server scripts.">
+              <span class="mitre-cell-id">T1203</span>
+              <span>Command Injection</span>
+            </div>
+            <div class="mitre-cell" id="mitre-php" title="Injecting raw PHP scripts inside input variables to run server routines.">
+              <span class="mitre-cell-id">T1059.006</span>
+              <span>PHP Scripting Exec</span>
+            </div>
+            <div class="mitre-cell" id="mitre-csrf" title="Cross-Site Request Forgery execution through client-side scripting.">
+              <span class="mitre-cell-id">T1204.001</span>
+              <span>CSRF Execution</span>
+            </div>
+            <div class="mitre-cell" id="mitre-javascript" title="JavaScript attacks including Node.js deserialization or prototype pollution.">
+              <span class="mitre-cell-id">T1059.007</span>
+              <span>JavaScript Attack</span>
+            </div>
+          </div>
+          <!-- Column 3 -->
+          <div class="mitre-column">
+            <div class="mitre-header-cell">Persistence</div>
+            <div class="mitre-cell" id="mitre-upload" title="Uploading raw web shells or malicious executables onto the document root.">
+              <span class="mitre-cell-id">T1505.003</span>
+              <span>Web Shell Upload</span>
+            </div>
+          </div>
+          <!-- Column 4 -->
+          <div class="mitre-column">
+            <div class="mitre-header-cell">Defense Evasion</div>
+            <div class="mitre-cell" id="mitre-xss" title="Injecting malicious scripts executing in browser sandboxes.">
+              <span class="mitre-cell-id">T1189</span>
+              <span>Stored/Reflected XSS</span>
+            </div>
+            <div class="mitre-cell" id="mitre-csp" title="Evading Content Security Policy controls using JSONP or script injections.">
+              <span class="mitre-cell-id">T1562.001</span>
+              <span>CSP Evasion</span>
+            </div>
+          </div>
+          <!-- Column 5 -->
+          <div class="mitre-column">
+            <div class="mitre-header-cell">Credential Access</div>
+            <div class="mitre-cell" id="mitre-brute" title="Brute force login trials on application login pages.">
+              <span class="mitre-cell-id">T1110</span>
+              <span>Brute Force Login</span>
+            </div>
+            <div class="mitre-cell" id="mitre-session" title="Weak session identification or predictability exploits.">
+              <span class="mitre-cell-id">T1539</span>
+              <span>Weak Session IDs</span>
+            </div>
+            <div class="mitre-cell" id="mitre-crypto" title="Insecure cryptographic algorithms or exposed hash properties.">
+              <span class="mitre-cell-id">T1552</span>
+              <span>Weak Cryptography</span>
+            </div>
+          </div>
+          <!-- Column 6 -->
+          <div class="mitre-column">
+            <div class="mitre-header-cell">Discovery</div>
+            <div class="mitre-cell" id="mitre-traversal" title="Local File Inclusion (LFI) attempts to read administrative assets (/etc/passwd).">
+              <span class="mitre-cell-id">T1083</span>
+              <span>Directory Traversal</span>
+            </div>
+            <div class="mitre-cell" id="mitre-api" title="Exploitation of API services or route mapping.">
+              <span class="mitre-cell-id">T1046</span>
+              <span>API Discovery</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Treemaps / Radar analysis rows -->
+      <div class="grid2" style="margin-top: 16px;">
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i data-lucide="radar"></i> Dynamic Ingress Threat Radar</span></div>
+          <div class="chart-wrap-large" id="dashRadarChart"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i data-lucide="trending-up"></i> Threat Trend Analysis (live)</span></div>
+          <div class="chart-wrap-large" id="dashLineChart"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ ENTERPRISE DETECTIONS CONSOLE ══════════════════ -->
+    <div class="view" id="view-enterprise-detections">
+      <div class="view-header">
+        <h2>Enterprise Threat Detection Console</h2>
+        <p class="text-muted">Multi-layered signature matcher, live false-positive calibration, and MITRE heatmap visualization</p>
+      </div>
+
+      <!-- Advanced counters row -->
+      <div class="metrics" style="margin-bottom: 16px;">
+        <div class="metric m-blue">
+          <div class="metric-label">Total Detections <i data-lucide="shield-alert" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val blue" id="ent-total-detections">0</div>
+          <div class="metric-sub">correlated rule matches</div>
+        </div>
+        <div class="metric m-purple">
+          <div class="metric-label">Active Signatures <i data-lucide="binary" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val purple" id="ent-active-signatures">30</div>
+          <div class="metric-sub">enterprise attack rules</div>
+        </div>
+        <div class="metric m-red">
+          <div class="metric-label">Auto-Filtered FPs <i data-lucide="filter" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val red" id="ent-filtered-fps">0</div>
+          <div class="metric-sub">false positive alerts suppressed</div>
+        </div>
+        <div class="metric m-green">
+          <div class="metric-label">Rule Trigger Rate <i data-lucide="zap" style="width:12px;height:12px;"></i></div>
+          <div class="metric-val green" id="ent-trigger-rate">0.0%</div>
+          <div class="metric-sub">average rule precision</div>
+        </div>
+      </div>
+
+      <!-- Live Attack Feed (Real-Time) & MITRE ATT&CK Matrix Grid -->
+      <div class="grid2" style="margin-bottom: 16px;">
+        <div class="card" style="display:flex; flex-direction:column; min-height: 400px;">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="activity"></i> Live Detection Stream</span>
+            <span class="badge sev-crit">REAL-TIME</span>
+          </div>
+          <div class="alert-feed" id="entLiveFeed" style="flex:1; max-height:350px; overflow-y:auto;">
+            <div class="feed-placeholder">Awaiting rule triggers...</div>
+          </div>
+        </div>
+
+        <div class="card" style="display:flex; flex-direction:column;">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="grid"></i> MITRE Tactic Heatmap</span>
+            <span class="badge sev-high" id="mitre-intensity-badge">0 tactics triggered</span>
+          </div>
+          <div style="flex:1; padding: 10px 0; overflow-y: auto; max-height: 350px;">
+            <div style="display: flex; flex-direction: column; gap: 8px;" id="mitreHeatmapList">
+              <div class="feed-placeholder">No tactics logged yet</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trend Timeline & Targeted URL Resource Treemap -->
+      <div class="grid2" style="margin-bottom: 16px;">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="trending-up"></i> Threat Trend Timeline (24h)</span>
+          </div>
+          <div class="chart-wrap-large" style="height: 300px;" id="entTimelineChart"></div>
+        </div>
+
+        <div class="card" style="display:flex; flex-direction:column;">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="link"></i> Top Targeted Endpoints &amp; Attacks</span>
+          </div>
+          <div style="flex:1; overflow-y:auto; max-height: 300px;" id="entTopUrls">
+            <div class="feed-placeholder">No endpoint data parsed</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Attack Type Doughnut Chart & Severity Stacked Bar Chart -->
+      <div class="grid2" style="margin-bottom: 16px;">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="pie-chart"></i> Attack Type Distribution</span>
+          </div>
+          <div class="chart-wrap-large" style="height: 300px;" id="entAttackTypeChart"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="bar-chart-2"></i> Severity Distribution Over Time</span>
+          </div>
+          <div class="chart-wrap-large" style="height: 300px;" id="entSeverityChart"></div>
+        </div>
+      </div>
+
+      <!-- Suspicious User Agents & HTTP Status Anomaly Analysis -->
+      <div class="grid2" style="margin-bottom: 16px;">
+        <div class="card" style="display:flex; flex-direction:column;">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="terminal"></i> Suspicious Web Scanners &amp; Bots</span>
+          </div>
+          <div style="flex:1; overflow-y:auto; max-height: 300px;" id="entSuspiciousAgents">
+            <div class="feed-placeholder">Awaiting bot activity...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="help-circle"></i> HTTP Status Code Profile</span>
+          </div>
+          <div class="chart-wrap-large" style="height: 300px;" id="entHttpStatusChart"></div>
+        </div>
+      </div>
+
+      <!-- 24x7 Threat Activity Heatmap & Top Attacker Campaigns -->
+      <div class="grid2" style="margin-bottom: 16px;">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="calendar"></i> 24x7 Threat Density Heatmap</span>
+          </div>
+          <div class="chart-wrap-large" style="height: 300px;" id="entHeatmapChart"></div>
+        </div>
+
+        <div class="card" style="display:flex; flex-direction:column;">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="users"></i> Active Campaigns &amp; Attacker IPs</span>
+          </div>
+          <div style="flex:1; overflow-y:auto; max-height: 300px;" id="entTopAttakers">
+            <div class="feed-placeholder">No campaign activity logged</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════ LIVE MONITOR ══════════════════ -->
+    <div class="view" id="view-live">
+      <div class="live-header">
+        <div>
+          <h2>Real-Time SOC Monitor <span id="liveIndicator" class="live-badge waiting">WAITING</span></h2>
+          <p class="text-muted">Real-time log ingestion stream and active ModSecurity CRS alert dispatcher</p>
+        </div>
+        <div>
+          <button class="btn btn-ghost btn-sm" onclick="resetSession()">Reset Session</button>
+        </div>
+      </div>
+
+      <!-- Agent commands card -->
+      <div class="card agent-card">
+        <div class="card-header">
+          <span class="card-title"><i data-lucide="terminal"></i> Start Agent Stream</span>
+        </div>
+        <p class="text-sm text-muted" style="margin-bottom:10px">Deploy the python forwarder agent to ingest logs in real-time:</p>
+        <div class="cmd-tabs">
+          <button class="cmd-tab active" onclick="showCmd(1,this)">Real Log File</button>
+          <button class="cmd-tab" onclick="showCmd(0,this)">Simulate (Demo)</button>
+          <button class="cmd-tab" onclick="showCmd(2,this)">Fast Demo (10×)</button>
+        </div>
+        <div class="cmd-box" id="cmd0" style="display:none">python agent.py --server http://127.0.0.1:5000 --simulate</div>
+        <div class="cmd-box" id="cmd1">python3 log_agent.py [server_ip]</div>
+        <div class="cmd-box" id="cmd2" style="display:none">python agent.py --server http://127.0.0.1:5000 --simulate --speed 0.1</div>
+      </div>
+
+      <!-- Metric telemetries -->
+      <div class="metrics">
+        <div class="metric m-blue">
+          <div class="metric-label">Ingested Lines</div>
+          <div class="metric-val blue" id="lv-total">0</div>
+          <div class="metric-sub">this connection session</div>
+        </div>
+        <div class="metric m-red">
+          <div class="metric-label">WAF Detections</div>
+          <div class="metric-val red" id="lv-threats">0</div>
+          <div class="metric-sub">signature matches</div>
+        </div>
+        <div class="metric m-purple">
+          <div class="metric-label">Active IPs</div>
+          <div class="metric-val purple" id="lv-ips">0</div>
+          <div class="metric-sub">unique remote hostnames</div>
+        </div>
+        <div class="metric m-green">
+          <div class="metric-label">HTTP Error Ratio</div>
+          <div class="metric-val green" id="lv-errs">0%</div>
+          <div class="metric-sub">4xx &amp; 5xx distribution</div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <!-- Live Log Stream -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="text-quote"></i> Live Console Stream</span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
+              <input type="checkbox" id="autoScroll" checked> Auto-scroll
+            </label>
+          </div>
+          <div class="live-feed" id="liveFeed">
+            <div class="feed-placeholder">Awaiting link telemetry... Deploy the log forwarder agent.</div>
+          </div>
+        </div>
+
+        <!-- Live General Alerts -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="alert-circle"></i> Local Engine Alarms</span>
+            <span id="threatBadge" class="badge sev-crit" style="display:none">LIVE</span>
+          </div>
+          <div class="alert-feed" id="alertFeed">
+            <div class="feed-placeholder">No alarms logged</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Threats Side-by-Side (ModSecurity vs Sigma) -->
+      <div class="grid2" style="margin-top: 16px;">
+        <!-- Live WAF Alerts Panel (OWASP ModSecurity CRS) -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="radiation"></i> Live WAF Threat Stream (ModSecurity CRS)</span>
+            <span id="modsecThreatBadge" class="badge sev-crit" style="display:none">WAF BLOCK</span>
+          </div>
+          <div class="alert-feed" id="modsecThreatFeed" style="height: 350px;">
+            <div class="feed-placeholder">Awaiting WAF payload blocks...</div>
+          </div>
+        </div>
+        
+        <!-- Live Sigma Detections Panel -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="shield-alert"></i> Live Sigma Rules Engine Detections</span>
+            <span id="sigmaThreatBadge" class="badge sev-crit" style="display:none">SIGMA ALERT</span>
+          </div>
+          <div class="alert-feed" id="sigmaThreatFeed" style="height: 350px;">
+            <div class="feed-placeholder">Awaiting Sigma pattern detections...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-time ECharts gauges -->
+      <div class="grid2" style="margin-top: 16px;">
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i data-lucide="activity"></i> HTTP Ingress Rate (Live)</span></div>
+          <div class="chart-wrap" id="liveEChartsHour"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title"><i data-lucide="pie-chart"></i> Ingress Response Profiles</span></div>
+          <div class="chart-wrap" id="liveEChartsStatus"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ UPLOAD VIEW ══════════════════ -->
+    <div class="view" id="view-upload">
+      <div class="view-header">
+        <h2>Static Log Ingest Console</h2>
+        <p class="text-muted">Load local security logs for offline forensic reconstructions (.log, .txt)</p>
+      </div>
+      
+      <!-- Upload Initial Form -->
+      <div id="upload-form-container" style="max-width:680px">
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept=".log,.txt" multiple>
+          <div class="upload-icon"><i data-lucide="upload-cloud" style="width:48px;height:48px;"></i></div>
+          <h3>Drag baseline log assets here or browse</h3>
+          <p>Supports combined Apache, Nginx standard files</p>
+        </div>
+        
+        <div style="margin-top:14px;display:flex;gap:10px;align-items:flex-end">
+          <div style="flex:1">
+            <label class="field-label">SOC Incident Handler</label>
+            <input type="text" id="analystInput" value="Gohar Ali" class="field-input">
+          </div>
+          <button class="btn btn-primary" id="analyzeBtn" onclick="startUpload()" disabled>
+            <i data-lucide="play" style="width:14px;height:14px;"></i> Analyze Logs
+          </button>
+        </div>
+        <div id="fileList" style="margin-top:10px"></div>
+        
+        <div id="progressCard" style="display:none;margin-top:20px">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Ingesting Log Elements</span>
+              <span id="progressPct" class="mono accent">0%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+            <div class="terminal" id="terminalLog"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Results Forensic Analysis Console -->
+      <div id="upload-results-container" style="display:none; margin-top:20px;">
+        <!-- Forensic Header Card -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h3 style="margin:0; font-family:var(--hud); color:var(--accent);" id="forensic-filename">Forensic Report: filename.log</h3>
+              <div style="font-family:var(--mono); font-size:11px; color:var(--text3); margin-top:4px;" id="forensic-hash-label">SHA-256: ...</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="resetForensicConsole()" style="border-color:var(--danger); color:var(--danger);">
+              <i data-lucide="refresh-cw"></i> Upload New Log File
+            </button>
+          </div>
+        </div>
+
+        <!-- Secondary Internal Navigation Bar -->
+        <div class="filter-bar" style="margin-bottom: 20px; display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid var(--border); padding-bottom:10px;">
+          <button class="btn btn-ghost btn-sm forensic-tab-btn active" id="forensic-btn-dashboard" onclick="switchForensicSubTab('dashboard')">
+            <i data-lucide="layout-dashboard"></i> Overview
+          </button>
+          <button class="btn btn-ghost btn-sm forensic-tab-btn" id="forensic-btn-threats" onclick="switchForensicSubTab('threats')">
+            <i data-lucide="shield-bomb"></i> Detected Threats
+          </button>
+          <button class="btn btn-ghost btn-sm forensic-tab-btn" id="forensic-btn-logs" onclick="switchForensicSubTab('logs')">
+            <i data-lucide="terminal"></i> Log Explorer
+          </button>
+          <button class="btn btn-ghost btn-sm forensic-tab-btn" id="forensic-btn-custody" onclick="switchForensicSubTab('custody')">
+            <i data-lucide="fingerprint"></i> Custody &amp; FIM
+          </button>
+          <button class="btn btn-ghost btn-sm forensic-tab-btn" id="forensic-btn-reports" onclick="switchForensicSubTab('reports')">
+            <i data-lucide="file-text"></i> Export &amp; Remediation
+          </button>
+        </div>
+
+        <!-- Forensic Overview Sub-View -->
+        <div class="forensic-subview" id="forensic-subview-dashboard" style="display:block;">
+          <!-- Metrics row -->
+          <div class="metrics" style="margin-bottom: 16px;">
+            <div class="metric m-blue">
+              <div class="metric-label">Total Requests <i data-lucide="database" style="width:12px;height:12px;"></i></div>
+              <div class="metric-val blue" id="forensic-m-total">—</div>
+              <div class="metric-sub">parsed logs</div>
+            </div>
+            <div class="metric m-red">
+              <div class="metric-label">Threats Detected <i data-lucide="skull" style="width:12px;height:12px;"></i></div>
+              <div class="metric-val red" id="forensic-m-threats">—</div>
+              <div class="metric-sub">signature matches</div>
+            </div>
+            <div class="metric m-purple">
+              <div class="metric-label">Unique IPs <i data-lucide="globe" style="width:12px;height:12px;"></i></div>
+              <div class="metric-val purple" id="forensic-m-ips">—</div>
+              <div class="metric-sub">incident origin sources</div>
+            </div>
+            <div class="metric m-green">
+              <div class="metric-label">Error Rate <i data-lucide="alert-triangle" style="width:12px;height:12px;"></i></div>
+              <div class="metric-val green" id="forensic-m-errors">—</div>
+              <div class="metric-sub">4xx &amp; 5xx distribution</div>
+            </div>
+          </div>
+
+          <!-- Top IPs and Charts -->
+          <div class="grid2">
+            <div class="card" style="display:flex; flex-direction:column; justify-content: space-between;">
+              <div class="card-header">
+                <span class="card-title"><i data-lucide="bar-chart-3"></i> Top Ingress Attack Sources</span>
+              </div>
+              <div id="forensicTopIPs" style="flex: 1; display:flex; flex-direction:column; justify-content: center; min-height: 250px;"></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><span class="card-title"><i data-lucide="radar"></i> Forensic Threat Vector Radar</span></div>
+              <div class="chart-wrap-large" style="height: 280px;" id="forensicRadarChart"></div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top: 16px;">
+            <div class="card-header"><span class="card-title"><i data-lucide="trending-up"></i> Forensic Hourly Traffic Rate</span></div>
+            <div class="chart-wrap-large" style="height: 280px;" id="forensicLineChart"></div>
+          </div>
+        </div>
+
+        <!-- Forensic Threats Sub-View -->
+        <div class="forensic-subview" id="forensic-subview-threats" style="display:none;">
+          <div class="card table-card">
+            <div class="card-header">
+              <span class="card-title"><i data-lucide="shield-bomb"></i> Correlated Security Incidents</span>
+            </div>
+            <table class="log-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Attack Type</th>
+                  <th>Severity</th>
+                  <th>Origin IP</th>
+                  <th>Incident Details</th>
+                  <th>Count</th>
+                </tr>
+              </thead>
+              <tbody id="forensicThreatBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Forensic Log Explorer Sub-View -->
+        <div class="forensic-subview" id="forensic-subview-logs" style="display:none;">
+          <div class="filter-bar" style="margin-bottom: 12px; display:flex; gap:10px;">
+            <input type="text" id="forensicLogSearch" placeholder="Query IP, URL, methods..." oninput="applyForensicLogFilters()" style="flex:1;">
+            <select id="forensicStatusFilter" onchange="applyForensicLogFilters()">
+              <option value="all">All Status Codes</option>
+              <option value="2xx">2xx Success</option>
+              <option value="3xx">3xx Redirect</option>
+              <option value="4xx">4xx Client Errors</option>
+              <option value="5xx">5xx Server Errors</option>
+            </select>
+            <select id="forensicMethodFilter" onchange="applyForensicLogFilters()">
+              <option value="all">All HTTP Methods</option>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+          </div>
+
+          <div class="card table-card">
+            <table class="log-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Source IP</th>
+                  <th>Method</th>
+                  <th>URL Resource</th>
+                  <th>Status</th>
+                  <th>Bytes</th>
+                  <th>User Agent</th>
+                </tr>
+              </thead>
+              <tbody id="forensicLogBody"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <button class="btn btn-ghost btn-sm" id="forensicPrevBtn" onclick="changeForensicPage(-1)">← Previous</button>
+            <span class="text-sm text-muted" id="forensicPageInfo">Page 1 of 1</span>
+            <button class="btn btn-ghost btn-sm" id="forensicNextBtn" onclick="changeForensicPage(1)">Next →</button>
+          </div>
+        </div>
+
+        <!-- Forensic Custody & FIM Sub-View -->
+        <div class="forensic-subview" id="forensic-subview-custody" style="display:none;">
+          <div class="grid2">
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title"><i data-lucide="check-square"></i> Integrity Baseline</span>
+              </div>
+              <div style="margin-bottom:12px">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                  <span class="mono" style="font-size:13px; font-weight:600; color:var(--text);" id="forensicFilenameText">filename.log</span>
+                  <span class="badge sev-low">Integrity Verified</span>
+                </div>
+                <div class="hash-display" id="forensicHashDisplay" style="word-break: break-all; background: rgba(0, 0, 0, 0.2); padding: 10px; border-radius: 6px; font-family: var(--mono); border: 1px solid var(--border);">—</div>
+                <div class="text-xs text-muted" style="margin-top:6px">Verification Signature: SHA-256</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title"><i data-lucide="fingerprint"></i> Cryptographic Hash Asserter</span>
+              </div>
+              <p class="text-sm text-muted" style="margin-bottom: 10px;">Input forensic file hashes to verify integrity:</p>
+              <input id="forensicVerifyInput" type="text" placeholder="SHA-256 baseline hashes..." class="field-input" style="font-family:var(--mono); font-size:12px; margin-bottom:10px;">
+              <button class="btn btn-ghost btn-sm" onclick="verifyForensicHash()"><i data-lucide="shield-check"></i> Verify Hash Integrity</button>
+              <div id="forensicVerifyResult" style="margin-top: 10px;"></div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top: 16px;">
+            <div class="card-header">
+              <span class="card-title"><i data-lucide="database"></i> Forensic Chain-Of-Custody Log</span>
+            </div>
+            <div id="forensicCustodySection"></div>
+          </div>
+        </div>
+
+        <!-- Forensic Reports Sub-View -->
+        <div class="forensic-subview" id="forensic-subview-reports" style="display:none;">
+          <div class="card" style="margin-bottom: 16px;">
+            <div class="card-header"><span class="card-title"><i data-lucide="settings"></i> Report Directives Configuration</span></div>
+            <div class="grid2">
+              <div>
+                <label class="field-label">Forensic Investigator</label>
+                <input type="text" id="forensicRptAnalyst" value="Gohar Ali" class="field-input">
+              </div>
+              <div>
+                <label class="field-label">Organization Registry</label>
+                <input type="text" id="forensicRptOrg" value="BS Digital Forensics &amp; Cyber Security" class="field-input">
+              </div>
+            </div>
+            <div style="margin-top: 14px; display: flex; gap: 10px;">
+              <button class="btn btn-primary" onclick="generateForensicPDF()"><i data-lucide="download"></i> Generate Forensic PDF</button>
+              <button class="btn btn-ghost" onclick="exportForensicCustody()"><i data-lucide="share-2"></i> Export Custody JSON</button>
+              <button class="btn btn-ghost" onclick="exportForensicCSV()"><i data-lucide="download"></i> Export Logs CSV</button>
+            </div>
+          </div>
+
+          <!-- Remediation Recommendations -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title"><i data-lucide="list"></i> Forensic Remediation Recommendations</span>
+            </div>
+            <div id="forensicRemediationSection" class="text-sm text-muted" style="line-height: 2;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ CYBER RANGE (DVWA TEST LAB) ══════════════════ -->
+    <div class="view" id="view-testlab">
+      <div class="view-header">
+        <h2>SOC Cyber Range Lab</h2>
+        <p class="text-muted">Live attack range verification, compliance checklists, and WAF validation</p>
+      </div>
+
+      <div class="grid2" style="margin-bottom: 20px;">
+        <!-- Telemetries -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="activity"></i> Range System Telemetry</span>
+            <span class="badge status-2xx" id="tl-agent-status">OFFLINE</span>
+          </div>
+          <div style="padding: 10px 0;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span class="text-sm text-muted">Range Target Hostname:</span>
+              <span class="mono text-sm" id="tl-hostname">—</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span class="text-sm text-muted">Operating System:</span>
+              <span class="mono text-sm" id="tl-os">—</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span class="text-sm text-muted">Last Log Read:</span>
+              <span class="mono text-sm" id="tl-last-read">—</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span class="text-sm text-muted">Last Seen (Heartbeat):</span>
+              <span class="mono text-sm" id="tl-last-seen">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resource widget -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="cpu"></i> Agent Resource Utilization</span>
+          </div>
+          <div style="padding: 10px 0;">
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span class="text-sm text-muted">CPU Usage</span>
+                <span class="mono text-sm" id="tl-cpu-pct">0%</span>
+              </div>
+              <div class="progress-bar" style="margin:0;"><div class="progress-fill" id="tl-cpu-fill" style="width: 0%; background: var(--accent);"></div></div>
+            </div>
+            <div style="margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span class="text-sm text-muted">Memory Usage</span>
+                <span class="mono text-sm" id="tl-mem-pct">0%</span>
+              </div>
+              <div class="progress-bar" style="margin:0;"><div class="progress-fill" id="tl-mem-fill" style="width: 0%; background: var(--accent2);"></div></div>
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span class="text-sm text-muted">Disk Usage</span>
+                <span class="mono text-sm" id="tl-disk-pct">0%</span>
+              </div>
+              <div class="progress-bar" style="margin:0;"><div class="progress-fill" id="tl-disk-fill" style="width: 0%; background: var(--accent3);"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="metrics" style="margin-bottom: 20px;">
+        <div class="metric m-blue">
+          <div class="metric-label">Ingress Log Pipelines</div>
+          <div class="metric-val blue" id="tl-connected-count">0</div>
+          <div class="metric-sub" id="tl-connected-list">No active lines</div>
+        </div>
+        <div class="metric m-red">
+          <div class="metric-label">ModSecurity Blocks</div>
+          <div class="metric-val red" id="tl-waf-blocks">0</div>
+          <div class="metric-sub">WAF Block events</div>
+        </div>
+        <div class="metric m-purple">
+          <div class="metric-label">Total Correlated Attacks</div>
+          <div class="metric-val purple" id="tl-total-attacks">0</div>
+          <div class="metric-sub">Across ranges</div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <!-- Checklist -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="check-square"></i> Attack Lab Validation Tracker</span>
+          </div>
+          <p class="text-xs text-muted" style="margin-bottom: 12px;">Launch range simulations to trigger the defensive validation hooks:</p>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">1. Brute Force</span></div>
+              <span class="badge sev-crit" id="chk-brute">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">2. Command Injection</span></div>
+              <span class="badge sev-crit" id="chk-cmd">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">3. CSRF</span></div>
+              <span class="badge sev-crit" id="chk-csrf">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">4. File Inclusion</span></div>
+              <span class="badge sev-crit" id="chk-traversal">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">5. File Upload</span></div>
+              <span class="badge sev-crit" id="chk-upload">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">6. Insecure CAPTCHA</span></div>
+              <span class="badge sev-crit" id="chk-captcha">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">7. SQL Injection</span></div>
+              <span class="badge sev-crit" id="chk-sqli">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">8. SQLi (Blind)</span></div>
+              <span class="badge sev-crit" id="chk-sqli_blind">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">9. Weak Session IDs</span></div>
+              <span class="badge sev-crit" id="chk-weak_id">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">10. XSS (DOM)</span></div>
+              <span class="badge sev-crit" id="chk-xss_dom">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">11. XSS (Reflected)</span></div>
+              <span class="badge sev-crit" id="chk-xss_reflected">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">12. XSS (Stored)</span></div>
+              <span class="badge sev-crit" id="chk-xss_stored">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">13. CSP Bypass</span></div>
+              <span class="badge sev-crit" id="chk-csp">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">14. JS Attacks</span></div>
+              <span class="badge sev-crit" id="chk-javascript">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">15. Auth Bypass</span></div>
+              <span class="badge sev-crit" id="chk-auth_bypass">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">16. Open Redirect</span></div>
+              <span class="badge sev-crit" id="chk-redirect">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">17. Cryptography</span></div>
+              <span class="badge sev-crit" id="chk-crypto">PENDING</span>
+            </div>
+            <div class="ip-item" style="margin: 0; padding: 6px 10px;">
+              <div class="ip-info"><span class="mono" style="font-size:13px; font-family:var(--hud);">18. API</span></div>
+              <span class="badge sev-crit" id="chk-api">PENDING</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Range modsec alerts -->
+        <div class="card" style="display: flex; flex-direction: column;">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="shield-alert"></i> Recent ModSecurity WAF Triggers</span>
+          </div>
+          <div class="alert-feed" id="tl-modsec-alerts" style="flex: 1; max-height: 330px; overflow-y: auto;">
+            <div class="feed-placeholder">No alerts triggered</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ THREATS (SIEM INCIDENT CONSOLE) ══════════════════ -->
+    <div class="view" id="view-threats">
+      <div class="view-header">
+        <h2>SIEM Incident Console</h2>
+        <p class="text-muted">Correlated alarms, severity filters, and deep-dive incident grouping</p>
+      </div>
+      
+      <div class="filter-bar" style="margin-bottom: 12px;">
+        <select id="threatSevFilter" onchange="renderThreats()">
+          <option value="all">All Severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        
+        <select id="threatTypeFilter" onchange="renderThreats()">
+          <option value="all">All Tactic Types</option>
+          <option value="Brute Force">Brute Force</option>
+          <option value="HTTP Flood / DDoS">DDoS / Flood</option>
+          <option value="Directory Traversal">Dir Traversal</option>
+          <option value="Vulnerability Scanner">Scanner / Recon</option>
+          <option value="Error Storm">Error Storm</option>
+          <option value="SQL Injection">SQL Injection</option>
+          <option value="XSS">XSS</option>
+          <option value="RCE">Command Injection (RCE)</option>
+        </select>
+      </div>
+
+      <div class="card table-card">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>Incident Time</th>
+              <th>Attack Type</th>
+              <th>Severity</th>
+              <th>Origin IP</th>
+              <th>Incident Details</th>
+              <th>Occurrences</th>
+            </tr>
+          </thead>
+          <tbody id="threatBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════════════════ LOG VIEWER ══════════════════ -->
+    <div class="view" id="view-logs">
+      <div class="view-header">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+          <div>
+            <h2>SIEM Forensic Log Explorer</h2>
+            <p class="text-muted">Query, filter, and inspect structured log entries stored in DB</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="exportCSV()"><i data-lucide="download"></i> Export CSV</button>
+        </div>
+      </div>
+      
+      <div class="filter-bar" style="margin-bottom: 12px;">
+        <input type="text" id="logSearch" placeholder="Query IP, URL, methods..." oninput="applyLogFilters()">
+        <select id="statusFilter" onchange="applyLogFilters()">
+          <option value="all">All Status Codes</option>
+          <option value="2xx">2xx Success</option>
+          <option value="3xx">3xx Redirect</option>
+          <option value="4xx">4xx Client Errors</option>
+          <option value="5xx">5xx Server Errors</option>
+        </select>
+        <select id="methodFilter" onchange="applyLogFilters()">
+          <option value="all">All HTTP Methods</option>
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="DELETE">DELETE</option>
+        </select>
+      </div>
+
+      <div class="card table-card">
+        <table class="log-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Source IP</th>
+              <th>Method</th>
+              <th>URL Resource</th>
+              <th>Status</th>
+              <th>Bytes Sent</th>
+              <th>Agent string</th>
+            </tr>
+          </thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <button class="btn btn-ghost btn-sm" id="prevBtn" onclick="changePage(-1)">← Previous</button>
+        <span class="text-sm text-muted" id="pageInfo">—</span>
+        <button class="btn btn-ghost btn-sm" id="nextBtn" onclick="changePage(1)">Next →</button>
+      </div>
+    </div>
+
+    <!-- ══════════════════ TIMELINE ══════════════════ -->
+    <div class="view" id="view-timeline">
+      <div class="view-header">
+        <h2>Chronological Incident Reconstruction</h2>
+        <p class="text-muted">Correlated chronological attack timeline - tracing threat actor progression</p>
+      </div>
+      
+      <div class="card" style="margin-bottom: 16px;">
+        <div class="card-header"><span class="card-title"><i data-lucide="bar-chart-2"></i> Chronological Traffic Densities</span></div>
+        <div class="chart-wrap" style="height: 140px;" id="timelineHourChart"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i data-lucide="git-branch"></i> Reconstruction Event Sequences</span>
+          <span class="text-xs text-muted" id="tlCount"></span>
+        </div>
+        <div id="timelineItems" style="max-height: 420px; overflow-y: auto;"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ INTEGRITY (FIM) ══════════════════ -->
+    <div class="view" id="view-integrity">
+      <div class="view-header">
+        <h2>File Integrity Monitoring (FIM)</h2>
+        <p class="text-muted">SHA-256 baseline configuration verification and cryptographic chain-of-custody audits</p>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="check-square"></i> Integrity Baselines</span>
+          </div>
+          <div id="integritySection"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title"><i data-lucide="fingerprint"></i> Cryptographic Hash Asserter</span>
+          </div>
+          <p class="text-sm text-muted" style="margin-bottom: 10px;">Input forensic file hashes to verify integrity:</p>
+          <input id="verifyInput" type="text" placeholder="SHA-256 baseline hashes..." class="field-input" style="font-family:var(--mono); font-size:12px; margin-bottom:10px;">
+          <button class="btn btn-ghost btn-sm" onclick="verifyHash()"><i data-lucide="shield-check"></i> Verify Hash Integrity</button>
+          <div id="verifyResult" style="margin-top: 10px;"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 16px;">
+        <div class="card-header">
+          <span class="card-title"><i data-lucide="database"></i> Forensic Chain-Of-Custody Log</span>
+          <button class="btn btn-ghost btn-sm" onclick="exportCustody()"><i data-lucide="download"></i> Export Custody JSON</button>
+        </div>
+        <div id="custodySection"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ IP BLOCKING (FIREWALL) ══════════════════ -->
+    <div class="view" id="view-blocking">
+      <div class="view-header">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+          <div>
+            <h2>Ingress IP Blocking System</h2>
+            <p class="text-muted">Deploy and export active iptables / ufw drop profiles instantly</p>
+          </div>
+          <button class="btn btn-danger" onclick="showBlockModal()"><i data-lucide="user-x"></i> Block All Malicious IPs</button>
+        </div>
+      </div>
+
+      <div id="ipBlockList" style="display:flex; flex-direction:column; gap: 8px;"></div>
+
+      <div class="card" style="margin-top: 16px;">
+        <div class="card-header">
+          <span class="card-title"><i data-lucide="terminal"></i> Generated Firewall Drop Directives</span>
+          <button class="btn btn-ghost btn-sm" onclick="downloadBlockScript()"><i data-lucide="download"></i> Download Script (.sh)</button>
+        </div>
+        <div class="terminal" id="firewallOutput" style="max-height: 320px;"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ REPORTS ══════════════════ -->
+    <div class="view" id="view-report">
+      <div class="view-header">
+        <h2>SOC Incident Reports Generator</h2>
+        <p class="text-muted">Construct executive forensic reports mapping logs to MITRE and OWASP matrices</p>
+      </div>
+
+      <div class="card" style="margin-bottom: 16px;">
+        <div class="card-header"><span class="card-title"><i data-lucide="settings"></i> Report Directives Configuration</span></div>
+        <div class="grid2">
+          <div>
+            <label class="field-label">Forensic Investigator</label>
+            <input type="text" id="rptAnalyst" value="Gohar Ali" class="field-input">
+          </div>
+          <div>
+            <label class="field-label">Organization Registry</label>
+            <input type="text" id="rptOrg" value="BS Digital Forensics &amp; Cyber Security" class="field-input">
+          </div>
+        </div>
+        <div style="margin-top: 14px; display: flex; gap: 10px;">
+          <button class="btn btn-primary" onclick="generatePDF()"><i data-lucide="download"></i> Generate Incident PDF</button>
+          <button class="btn btn-ghost" onclick="exportCustody()"><i data-lucide="share-2"></i> Export Custody JSON</button>
+        </div>
+      </div>
+
+      <div class="card" id="reportPreview">
+        <div style="text-align:center; padding: 20px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px;">
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--text3); margin-bottom: 6px;">CONFIDENTIAL FORENSIC DOSSIER</div>
+          <div style="font-size: 20px; font-weight: 700; color: var(--danger); font-family:var(--hud);">FORENSIC INCIDENT REPORT</div>
+          <div class="text-sm text-muted" id="rpt-date"></div>
+        </div>
+        
+        <div class="grid2" style="margin-bottom: 16px;">
+          <div>
+            <div class="field-label">Lead Analyst</div>
+            <div id="rpt-analyst" style="font-size: 14px; margin-top: 4px; font-weight:600;"></div>
+          </div>
+          <div>
+            <div class="field-label">Classification</div>
+            <span class="badge sev-crit" style="margin-top: 4px; display: inline-block;">RESTRICTED / SECURE</span>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top: 16px; margin-bottom: 16px;">
+          <div class="card-title" style="margin-bottom:10px;"><i data-lucide="info"></i> Incident Summary Details</div>
+          <div class="text-sm text-muted" id="rpt-summary" style="line-height: 1.8;"></div>
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top: 16px; margin-bottom: 16px;">
+          <div class="card-title" style="margin-bottom: 12px;"><i data-lucide="layout-grid"></i> Security Baseline Telemetries</div>
+          <div id="rpt-findings" class="grid2"></div>
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top: 16px;">
+          <div class="card-title" style="margin-bottom: 10px;"><i data-lucide="list"></i> Cyber Range Remediation Recommendations</div>
+          <div id="rpt-recs" class="text-sm text-muted" style="line-height: 2;"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- MODALS -->
+<div class="modal-bg" id="blockModal">
+  <div class="modal">
+    <h3>Apply Global Firewall Constraints</h3>
+    <p>Deploy active IP table drops for <strong id="blockCount">0</strong> malicious threat origins. This action records in the forensic chain-of-custody.</p>
+    <div class="cmd-preview" id="blockPreview"></div>
+    <div style="display:flex; gap:10px; margin-top: 16px;">
+      <button class="btn btn-danger" onclick="confirmBlockAll()">Confirm Blocks</button>
+      <button class="btn btn-ghost" onclick="closeModal('blockModal')">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="loadingModal">
+  <div class="modal" style="text-align: center;">
+    <div style="border: 4px solid var(--border); border-top: 4px solid var(--accent); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+    <p style="margin-top: 12px; color: var(--text2);" id="loadingMsg">Loading SOC telemetry...</p>
+  </div>
+</div>
+
+<style>
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
+
+<!-- SIGMA RULES EXPLORER MODAL -->
+<div class="modal-bg" id="sigmaRulesModal">
+  <div class="modal" style="max-width: 80%; width: 900px; max-height: 85vh; display: flex; flex-direction: column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:12px;">
+      <h3 style="margin:0; font-family:var(--hud); color:var(--accent); display:flex; align-items:center; gap:8px;">
+        <i data-lucide="binary"></i> Sigma Rules Repository Browser
+      </h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('sigmaRulesModal')"><i data-lucide="x"></i></button>
+    </div>
+    
+    <div class="filter-bar" style="margin-bottom: 12px; display:flex; gap:10px;">
+      <input type="text" id="sigmaRuleSearch" placeholder="Search rules by title, tags, description..." oninput="filterSigmaRules()" style="flex:1;">
+      <select id="sigmaRuleLevelFilter" onchange="filterSigmaRules()">
+        <option value="all">All Levels</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+      <select id="sigmaRuleCategoryFilter" onchange="filterSigmaRules()">
+        <option value="all">All Categories</option>
+        <option value="webserver">Webserver</option>
+        <option value="linux">Linux</option>
+      </select>
+    </div>
+    
+    <div style="flex: 1; overflow-y: auto; margin-bottom: 16px;" class="card table-card">
+      <table class="log-table" style="font-size:12px;">
+        <thead>
+          <tr>
+            <th style="width: 30%;">Title</th>
+            <th style="width: 15%;">Level</th>
+            <th style="width: 15%;">Category</th>
+            <th style="width: 25%;">Description</th>
+            <th style="width: 15%;">Tags</th>
+          </tr>
+        </thead>
+        <tbody id="sigmaRulesTableBody">
+          <tr><td colspan="5" style="text-align:center;">Loading rules repo...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div style="display:flex; justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="closeModal('sigmaRulesModal')">Close Repository</button>
+    </div>
+  </div>
+</div>
+
+<!-- THREAT TOAST -->
+<div id="toastContainer" style="position:fixed; top:70px; right:20px; z-index:300; display:flex; flex-direction:column; gap:10px; max-width:340px;"></div>
+
+<script src="/static/js/app.js"></script>
+<script src="/static/js/detections.js"></script>
+<script>
+  // Initialise Lucide icons safely
+  if (typeof lucide !== 'undefined') {
+    try {
+      lucide.createIcons();
+    } catch (e) {
+      console.error('Lucide error:', e);
+    }
+  }
+  
+  // Sidebar Toggler
+  function toggleSidebar() {
+    const sb = document.getElementById('sidebar');
+    if (sb) {
+      sb.classList.toggle('collapsed');
+    }
+  }
+
+  // System local/UTC clock updates
+  function updateSOCClock() {
+    const now = new Date();
+    const utcStr = now.toUTCString().slice(17, 25);
+    const clock = document.getElementById('socTime');
+    if (clock) {
+      clock.textContent = `${utcStr} UTC`;
+    }
+  }
+  setInterval(updateSOCClock, 1000);
+  updateSOCClock();
+</script>
+</body>
+</html>

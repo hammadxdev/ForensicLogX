@@ -1,0 +1,8 @@
+{
+  "filename": "sample_attack_log.log",
+  "filepath": "E:\\ForensicLogX\\backend\\..\\uploads\\sample_attack_log.log",
+  "sha256": "1a03a01f259c49819e0f5d97fea77ed2b99518ee7bf3b579ebe02461cc68ea71",
+  "file_size": 18100,
+  "collected": "2026-06-09T20:44:59.670376",
+  "algorithm": "SHA-256"
+}
